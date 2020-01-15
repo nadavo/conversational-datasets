@@ -119,9 +119,9 @@ def _should_skip(text, min_words, max_words):
 def _create_example(product_id, question, answer):
     """Create an example dictionary."""
     return {
-        'product_id': product_id,
-        'context': question,
-        'response': answer,
+        'product_id': str(product_id),
+        'context': str(question),
+        'response': str(answer)
     }
 
 
@@ -162,7 +162,7 @@ class _TrainTestSplitFn(beam.DoFn):
         self._num_buckets = num_buckets
 
     def process(self, example):
-        split_value = self._split_value(example['product_id'])
+        split_value = self._split_value(example['product_id'].encode("utf-8"))
         split = (
             self.TRAIN_TAG if split_value < self._train_split else
             self.TEST_TAG)
