@@ -119,9 +119,9 @@ def _should_skip(text, min_words, max_words):
 def _create_example(product_id, question, answer):
     """Create an example dictionary."""
     return {
-        'product_id': str(product_id),
-        'context': str(question),
-        'response': str(answer)
+        'product_id': product_id,
+        'context': question,
+        'response': answer
     }
 
 
@@ -188,7 +188,7 @@ def run(argv=None):
     p = beam.Pipeline(options=pipeline_options)
 
     lines = p | "read qa files" >> ReadFromText(args.file_pattern)
-
+    # lines | 'Count input lines' >> beam.combiners.Count.Globally() | 'Print input lines' >> beam.Map(lambda x: print(f"*****\nNum input lines: {x}\n*****")) 
     # The lines are not JSON, but the string representation of python
     # dictionary objects. Parse them with ast.literal_eval.
     json_objects = lines | "parsing dictionaries" >> beam.Map(ast.literal_eval)
@@ -197,6 +197,7 @@ def run(argv=None):
             _create_tuples,
             min_words=args.min_words, max_words=args.max_words)
     )
+    # qa_tuples | 'Count qa_tuples' >> beam.combiners.Count.Globally() | 'Print qa_tuples' >> beam.Map(lambda x: print(f"*****\nNum qa tuples: {x}\n*****")) 
 
     # Remove duplicate examples.
     qa_tuples |= "key by QA" >> beam.Map(lambda v: (v[1:], v))
@@ -208,7 +209,7 @@ def run(argv=None):
         lambda args: _create_example(*args)
     )
     examples = _shuffle_examples(examples)
-
+    # examples | 'Count output examples' >> beam.combiners.Count.Globally() | 'Print output examples' >> beam.Map(lambda x: print(f"*****\nNum output examples: {x}\n*****"))
     examples |= "split train and test" >> beam.ParDo(
         _TrainTestSplitFn(args.train_split)
     ).with_outputs(_TrainTestSplitFn.TEST_TAG, _TrainTestSplitFn.TRAIN_TAG)

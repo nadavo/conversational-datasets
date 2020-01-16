@@ -56,7 +56,7 @@ PROJECT="your-google-cloud-project"
 DATADIR="gs://${BUCKET?}/amazon_qa/$(date +"%Y%m%d")"
 
 python amazon_qa/create_data.py \
-  --file_pattern gs://${BUCKET?}/amazon_qa/raw/* \
+  --file_pattern "gs://${BUCKET?}/amazon_qa/raw/*" \
   --output_dir ${DATADIR} \
   --runner DataflowRunner --temp_location ${DATADIR}/temp \
   --staging_location ${DATADIR}/staging \
