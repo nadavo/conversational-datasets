@@ -33,7 +33,7 @@ Below are instructions for how to generate the Amazon QA conversational dataset.
 
 ## Downloading Amazon QA dataset
 
-First you must download the input data from http://jmcauley.ucsd.edu/data/amazon/qa/. In total there are 38 `.json.gz` files to download. Unzip them all and copy them to your Google cloud storage bucket:
+First you must download the input data from http://jmcauley.ucsd.edu/data/amazon/qa/. In total there are 38 `.json.gz` files to download. Unzip them all and copy them to your Google cloud storage bucket (if available):
 
 ```bash
 gunzip *
@@ -46,6 +46,31 @@ Note that while the files are named `.json`, they are not actually valid
 JSON, but rather python dictionaries in string format.
 
 ## Run the dataflow script
+
+#### Run Locally
+
+Run the following command to process the raw input data into a conversational
+dataset:
+
+```bash
+NUM_CPU = <number-of-processes-to-run>
+
+PROJECT = <your-project-name>
+
+OUTPUT_DIR = <your-local-output-directory> 
+
+python amazon_qa/create_data.py \
+  --file_pattern "<explicit-full-path-to-raw-data>/*.json" \
+  --output_dir ${OUTPUT_DIR} \
+  --runner DirectRunner --direct_num_workers ${NUM_CPU} \ 
+  --temp_location ${OUTPUT_DIR}/temp \
+  --staging_location ${OUTPUT_DIR}/staging \
+  --project ${PROJECT} \
+  --dataset_format JSON
+```
+You may use `--dataset_format TF` to serialized Tensorflow examples in TFRecords, rather than JSON examples.
+
+#### Run on Google Cloud
 
 Run the following command to process the raw input data into a conversational
 dataset:
