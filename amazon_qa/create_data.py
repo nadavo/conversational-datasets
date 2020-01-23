@@ -12,10 +12,12 @@ import logging
 import os
 import uuid
 from functools import partial
+from past.builtins import unicode
 
 import apache_beam as beam
 import tensorflow as tf
 from apache_beam import pvalue
+from apache_beam.coders.coders import Coder
 from apache_beam.io.textio import ReadFromText, WriteToText
 from apache_beam.io.tfrecordio import WriteToTFRecord
 from apache_beam.options.pipeline_options import PipelineOptions, SetupOptions
@@ -95,7 +97,9 @@ def _create_tuples(qa_object, min_words, max_words):
         if (_should_skip(question, min_words, max_words)
                 or _should_skip(answer, min_words, max_words)):
             return
-        yield (product_id, question, answer)
+        yield (product_id.encode("utf-8", "surrogatepass"),
+               question.encode("utf-8", "surrogatepass"),
+               answer.encode("utf-8", "surrogatepass"))
 
     elif "questions" in qa_object:
         product_id = qa_object['asin']
@@ -107,7 +111,9 @@ def _create_tuples(qa_object, min_words, max_words):
                 answer = answer_obj['answerText']
                 if _should_skip(answer, min_words, max_words):
                     continue
-                yield (product_id, question, answer)
+                yield (product_id.encode("utf-8", "surrogatepass"),
+                       question.encode("utf-8", "surrogatepass"),
+                       answer.encode("utf-8", "surrogatepass"))
 
 
 def _should_skip(text, min_words, max_words):
@@ -132,6 +138,17 @@ def _shuffle_examples(examples):
     examples |= "group by key" >> beam.GroupByKey()
     examples |= "get shuffled values" >> beam.FlatMap(lambda t: t[1])
     return examples
+
+
+def _features_to_serialized_json_example(features):
+    """Convert a string dict to a serialized TF example.
+
+    The dictionary maps feature names (utf-8 encoded strings) to feature values (strings).
+    """
+    return json.dumps({
+        feature_name: feature_value.decode("utf-8", "surrogatepass")
+        for feature_name, feature_value in features.items()
+    })
 
 
 def _features_to_serialized_tf_example(features):
@@ -162,7 +179,7 @@ class _TrainTestSplitFn(beam.DoFn):
         self._num_buckets = num_buckets
 
     def process(self, example):
-        split_value = self._split_value(example['product_id'].encode("utf-8"))
+        split_value = self._split_value(example['product_id'])
         split = (
             self.TRAIN_TAG if split_value < self._train_split else
             self.TEST_TAG)
@@ -179,6 +196,23 @@ class _TrainTestSplitFn(beam.DoFn):
         )
 
 
+class StrUTF8SurrogatePassCoder(Coder):
+    """A coder used for reading and writing strings as UTF-8 with 'surrogatepass' error handling"""
+
+    def encode(self, value):
+        return value.encode(encoding='utf-8', errors='surrogatepass')
+
+    def decode(self, value):
+        return value.decode(encoding='utf-8', errors='surrogatepass')
+
+    def to_type_hint(self):
+        return unicode
+
+    def is_deterministic(self):
+        return True
+
+
+@timer
 def run(argv=None):
     """Run the beam pipeline."""
     args, pipeline_args = _parse_args(argv)
@@ -187,7 +221,7 @@ def run(argv=None):
     pipeline_options.view_as(SetupOptions).save_main_session = True
     p = beam.Pipeline(options=pipeline_options)
 
-    lines = p | "read qa files" >> ReadFromText(args.file_pattern)
+    lines = p | "read qa files" >> ReadFromText(args.file_pattern, coder=StrUTF8SurrogatePassCoder())
     # lines | 'Count input lines' >> beam.combiners.Count.Globally() | 'Print input lines' >> beam.Map(lambda x: print(f"*****\nNum input lines: {x}\n*****")) 
     # The lines are not JSON, but the string representation of python
     # dictionary objects. Parse them with ast.literal_eval.
@@ -217,7 +251,7 @@ def run(argv=None):
     if args.dataset_format == _JSON_FORMAT:
         write_sink = WriteToText
         file_name_suffix = ".json"
-        serialize_fn = json.dumps
+        serialize_fn = _features_to_serialized_json_example
     else:
         assert args.dataset_format == _TF_FORMAT
         write_sink = WriteToTFRecord
